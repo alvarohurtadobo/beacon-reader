@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Bcontrol</string>
+	<string>Bcontrol 2.0</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -47,5 +47,15 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>  
+	<string>Need BLE permission</string>  
+	<key>NSBluetoothPeripheralUsageDescription</key>  
+	<string>Need BLE permission</string>  
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>  
+	<string>Need Location permission</string>  
+	<key>NSLocationAlwaysUsageDescription</key>  
+	<string>Need Location permission</string>  
+	<key>NSLocationWhenInUseUsageDescription</key>  
+	<string>Need Location permission</string>
 </dict>
 </plist>
