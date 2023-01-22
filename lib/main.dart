@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:io' show Platform;
 import 'package:intl/intl.dart';
@@ -20,8 +21,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       new FlutterLocalNotificationsPlugin();
 
-  String _tag = "Beacons Plugin";
-  String _beaconResult = 'Not Scanned Yet.';
+  String _tag = "BControl 2.0";
+  String _beaconResult = 'Sin escanear aún.';
   int _nrMessagesReceived = 0;
   var isRunning = false;
   List<String> _results = [];
@@ -35,12 +36,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    print("init notif");
     WidgetsBinding.instance.addObserver(this);
     initPlatformState();
 
     // initialise the plugin. app_icon needs to be a added as a drawable resource to the Android head project
     var initializationSettingsAndroid =
-        new AndroidInitializationSettings('app_icon');
+        new AndroidInitializationSettings('launcher_icon');
     var initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
     flutterLocalNotificationsPlugin.initialize(initializationSettings);
@@ -76,18 +78,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       BeaconsPlugin.channel.setMethodCallHandler((call) async {
         print("Method: ${call.method}");
         if (call.method == 'scannerReady') {
-          _showNotification("Beacons monitoring started..");
+          _showNotification("Escaneo Beacon iniciado");
           await BeaconsPlugin.startMonitoring();
           setState(() {
             isRunning = true;
           });
         } else if (call.method == 'isPermissionDialogShown') {
           _showNotification(
-              "Prominent disclosure message is shown to the user!");
+              "Se muestra un mensaje de divulgación prominente al usuario!");
         }
       });
     } else if (Platform.isIOS) {
-      _showNotification("Beacons monitoring started..");
+      _showNotification("Monitoreo Beacon iniciado");
       await BeaconsPlugin.startMonitoring();
       setState(() {
         isRunning = true;
@@ -114,18 +116,38 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     beaconEventsController.stream.listen(
         (data) {
+          print("Stream received $_isInForeground");
           if (data.isNotEmpty && isRunning) {
             setState(() {
               _beaconResult = data;
               _results.add(_beaconResult);
               _nrMessagesReceived++;
             });
-
-            if (!_isInForeground) {
-              _showNotification("Beacons DataReceived: " + data);
+            print("display bg notification");
+            String myDatetime = DateTime.now().toIso8601String().substring(11,19);
+            Map<String, dynamic> myData = json.decode(data);
+            String myUuid = "No UUID";
+            String distance = "Infinity";
+            String proximity = "Far away";
+            if (myData.containsKey("uuid")) {
+              myUuid = myData["uuid"].toString();
+              if (myUuid.length >= 12) {
+                myUuid = myUuid.substring(myUuid.length - 12);
+              }
             }
-
-            print("Beacons DataReceived: " + data);
+            if (myData.containsKey("distance")) {
+              distance = myData["distance"];
+            }
+            if (myData.containsKey("proximity")) {
+              proximity = myData["proximity"];
+            }
+            print("Beacons DataReceived ($myDatetime): " + data);
+            print(
+                "Decoded DataReceived: $myUuid, Distancia: $distance ($proximity)");
+            if (!_isInForeground) {
+              _showNotification(
+                  "Beacon $myUuid detectado a hrs $myDatetime, Distancia: $distance ($proximity)");
+            }
           }
         },
         onDone: () {},
@@ -235,17 +257,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   void _showNotification(String subtitle) {
     var rng = new Random();
-    Future.delayed(Duration(seconds: 5)).then((result) async {
-      var androidPlatformChannelSpecifics = AndroidNotificationDetails(
+    Future.delayed(Duration(seconds: 2)).then((result) async {
+      var androidPlatformChannelSpecifics = const AndroidNotificationDetails(
           'your channel id', 'your channel name',
           importance: Importance.high,
           priority: Priority.high,
           ticker: 'ticker');
       var platformChannelSpecifics =
           NotificationDetails(android: androidPlatformChannelSpecifics);
-      await flutterLocalNotificationsPlugin.show(
-          rng.nextInt(100000), _tag, subtitle, platformChannelSpecifics,
-          payload: 'item x');
+      await flutterLocalNotificationsPlugin
+          .show(rng.nextInt(100000), _tag, subtitle, platformChannelSpecifics,
+              payload: 'item x')
+          .onError((error, stackTrace) {
+        print("Notification error is $error");
+      });
     });
   }
 
