@@ -1,15 +1,52 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:io' show Platform;
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:beacons_plugin/beacons_plugin.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:system_alert_window/system_alert_window.dart';
+
+checkPerm() async {
+  await SystemAlertWindow.checkPermissions;
+  var status = await Permission.bluetooth.status;
+  print("Check permission $status");
+  if (!status.isGranted) {
+    if (await status.isPermanentlyDenied) {
+      print("Open settings");
+      openAppSettings();
+    } else {
+      print("Requesting permission");
+      await Permission.bluetooth.request();
+    }
+  }
+}
+
+@pragma('vm:entry-point')
+void periodicFunction() {
+  final DateTime now = DateTime.now();
+  final int isolateId = Isolate.current.hashCode;
+  print(
+      "[$now] Running periodic function in the background every 10 seconds! isolate=$isolateId");
+  BeaconsPlugin.runInBackground(true);
+}
+
+bool showingDialogOverApps = false;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations(
+      [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
+  await AndroidAlarmManager.initialize();
   runApp(MyApp());
+  final int helloAlarmID = 0;
+  await AndroidAlarmManager.periodic(
+      const Duration(seconds: 10), helloAlarmID, periodicFunction);
 }
 
 class MyApp extends StatefulWidget {
@@ -33,10 +70,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final StreamController<String> beaconEventsController =
       StreamController<String>.broadcast();
 
+  // void callBack(tag) {
+  //   if (tag == "close") {
+  //     SystemAlertWindow.closeSystemWindow();
+  //     setState(() {
+  //       showingDialogOverApps = false;
+  //     });
+  //   }
+  // }
+
   @override
   void initState() {
     super.initState();
     print("init notif");
+    checkPerm();
+    // SystemAlertWindow.registerOnClickListener(callBack);
     WidgetsBinding.instance.addObserver(this);
     initPlatformState();
 
@@ -66,9 +114,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (Platform.isAndroid) {
       //Prominent disclosure
       await BeaconsPlugin.setDisclosureDialogMessage(
-          title: "Background Locations",
+          title: "Ubicaciones en segundo plano",
           message:
-              "[This app] collects location data to enable [feature], [feature], & [feature] even when the app is closed or not in use");
+              "BControl recolecta información de localización para hacer uso del bluetooth incluso cuando está en segundo plano");
 
       //Only in case, you want the dialog to be shown again. By Default, dialog will never be shown if permissions are granted.
       //await BeaconsPlugin.clearDisclosureDialogShowFlag(false);
@@ -112,11 +160,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         foregroundScanPeriod: 2200, foregroundBetweenScanPeriod: 10);
 
     BeaconsPlugin.setBackgroundScanPeriodForAndroid(
-        backgroundScanPeriod: 2200, backgroundBetweenScanPeriod: 10);
+        backgroundScanPeriod: 2200, backgroundBetweenScanPeriod: 100);
 
     beaconEventsController.stream.listen(
         (data) {
-          print("Stream received $_isInForeground");
+          print("----> Stream received $_isInForeground");
           if (data.isNotEmpty && isRunning) {
             setState(() {
               _beaconResult = data;
@@ -124,7 +172,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               _nrMessagesReceived++;
             });
             print("display bg notification");
-            String myDatetime = DateTime.now().toIso8601String().substring(11,19);
+            String myDatetime =
+                DateTime.now().toIso8601String().substring(11, 19);
             Map<String, dynamic> myData = json.decode(data);
             String myUuid = "No UUID";
             String distance = "Infinity";
@@ -152,10 +201,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         },
         onDone: () {},
         onError: (error) {
-          print("Error: $error");
+          print(">> Error: $error");
         });
 
     //Send 'true' to run in background
+    print("Set to run in background");
     await BeaconsPlugin.runInBackground(true);
 
     if (!mounted) return;
@@ -164,6 +214,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       home: Scaffold(
         appBar: AppBar(
           title: const Center(
@@ -182,18 +233,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               const SizedBox(
                 height: 40,
               ),
-              Container(
-                height: 200,
-                width: 200,
-                decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.all(Radius.circular(100)),
-                    image: DecorationImage(
-                        image: AssetImage("assets/icons/logo.png"))),
-                child: Image.asset(
-                  "assets/icons/logo.png",
-                  width: 20,
-                  height: 20,
+              Center(
+                child: Container(
+                  height: 200,
+                  width: 200,
+                  decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.all(Radius.circular(100)),
+                      image: DecorationImage(
+                          image: AssetImage("assets/icons/logo.png"))),
+                  child: Image.asset(
+                    "assets/icons/logo.png",
+                    width: 20,
+                    height: 20,
+                  ),
                 ),
               ),
               const SizedBox(
@@ -222,6 +275,66 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     });
                   },
                   child: Text(isRunning ? 'Detener' : 'Empezar a escanear',
+                      style: const TextStyle(fontSize: 20)),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: ElevatedButton(
+                  style: ButtonStyle(
+                      backgroundColor:
+                          MaterialStateProperty.all(const Color(0xfffec106))),
+                  onPressed: () async {
+                    if (showingDialogOverApps) {
+                      showingDialogOverApps = !showingDialogOverApps;
+                      SystemAlertWindow.closeSystemWindow();
+                    } else {
+                      SystemAlertWindow.checkPermissions().then((granted) {
+                        if (!(granted!)) {
+                          print("Permission not granded, skip");
+                        } else {
+                          showingDialogOverApps = !showingDialogOverApps;
+                        }
+                      });
+                      SystemAlertWindow.showSystemWindow(
+                        height: 200,
+                        margin: SystemWindowMargin(
+                            left: 20, right: 20, top: 20, bottom: 20),
+                        gravity: SystemWindowGravity.BOTTOM,
+                        header: SystemWindowHeader(
+                            decoration: SystemWindowDecoration(
+                                startColor: const Color(0xfffec106),
+                                endColor: const Color(0xfffec106)),
+                            title: SystemWindowText(
+                                text: "BControl 2.0 Corriendo en segundo plano",
+                                textColor: Colors.white)),
+                        body: SystemWindowBody(
+                            decoration: SystemWindowDecoration(
+                                startColor: Colors.white,
+                                endColor: Colors.white),
+                            rows: [
+                              EachRow(columns: [
+                                EachColumn(
+                                    text: SystemWindowText(
+                                        text:
+                                            "Resultados totales: $_nrMessagesReceived"))
+                              ])
+                            ]),
+                        // footer: SystemWindowFooter(
+                        //   buttons: [
+                        //     SystemWindowButton(
+                        //         text: SystemWindowText(text: 'close'),
+                        //         tag: "close")
+                        //   ],
+                        //   decoration: SystemWindowDecoration(
+                        //     startColor: Colors.blue,
+                        //   ),
+                        // ),
+                      );
+                    }
+                    setState(() {});
+                  },
+                  child: Text(showingDialogOverApps ? 'Ocultar' : 'Mostrar',
                       style: const TextStyle(fontSize: 20)),
                 ),
               ),
@@ -299,7 +412,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 style: Theme.of(context).textTheme.headline4?.copyWith(
                       fontSize: 14,
                       color: const Color(0xFF1A1B26),
-                      fontWeight: FontWeight.normal,
+                      // fontWeight: FontWeight.,
                     ),
               ),
               onTap: () {});
