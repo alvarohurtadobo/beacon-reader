@@ -3,14 +3,14 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:io' show Platform;
-import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:beacons_plugin/beacons_plugin.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:system_alert_window/system_alert_window.dart';
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 checkPerm() async {
   await SystemAlertWindow.checkPermissions;
